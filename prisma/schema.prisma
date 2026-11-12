@@ -1,0 +1,229 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  fullName  String
+  phone     String?
+  role      String   @default("CASHIER") // ADMIN | MANAGER | CASHIER | BARISTA
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  orders            Order[]
+  payments          Payment[]
+  stockTransactions StockTransaction[]
+  shifts            Shift[]
+}
+
+model Category {
+  id          String    @id @default(cuid())
+  name        String    @unique
+  description String?
+  sortOrder   Int       @default(0)
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  products Product[]
+}
+
+model Product {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  basePrice   Float
+  imageUrl    String?
+  isAvailable Boolean  @default(true)
+  categoryId  String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  category   Category         @relation(fields: [categoryId], references: [id])
+  variants   ProductVariant[]
+  orderItems OrderItem[]
+}
+
+model ProductVariant {
+  id         String  @id @default(cuid())
+  productId  String
+  size       String  // S | M | L
+  priceDelta Float   @default(0)
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, size])
+}
+
+model Topping {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  price       Float
+  isAvailable Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  orderItemToppings OrderItemTopping[]
+}
+
+model Table {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  zone      String   @default("Tầng 1")
+  capacity  Int      @default(4)
+  status    String   @default("AVAILABLE") // AVAILABLE | OCCUPIED | RESERVED
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  orders Order[]
+}
+
+model Customer {
+  id            String   @id @default(cuid())
+  fullName      String
+  phone         String   @unique
+  email         String?
+  loyaltyPoints Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  orders Order[]
+}
+
+model Voucher {
+  id             String   @id @default(cuid())
+  code           String   @unique
+  description    String?
+  discountType   String   // PERCENTAGE | FIXED_AMOUNT
+  discountValue  Float
+  minOrderAmount Float    @default(0)
+  maxDiscount    Float?
+  usageLimit     Int?
+  usedCount      Int      @default(0)
+  startDate      DateTime
+  endDate        DateTime
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  orders Order[]
+}
+
+model Order {
+  id             String   @id @default(cuid())
+  orderCode      String   @unique
+  type           String   @default("DINE_IN") // DINE_IN | TAKEAWAY
+  status         String   @default("PENDING") // PENDING | PREPARING | READY | COMPLETED | CANCELLED
+  subtotal       Float
+  discountAmount Float    @default(0)
+  totalAmount    Float
+  note           String?
+  tableId        String?
+  customerId     String?
+  voucherId      String?
+  createdById    String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  table     Table?      @relation(fields: [tableId], references: [id])
+  customer  Customer?   @relation(fields: [customerId], references: [id])
+  voucher   Voucher?    @relation(fields: [voucherId], references: [id])
+  createdBy User        @relation(fields: [createdById], references: [id])
+  items     OrderItem[]
+  payment   Payment?
+}
+
+model OrderItem {
+  id            String @id @default(cuid())
+  orderId       String
+  productId     String
+  productName   String
+  size          String @default("M")
+  unitPrice     Float
+  quantity      Int
+  toppingsTotal Float  @default(0)
+  lineTotal     Float
+  note          String?
+
+  order    Order              @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product  Product            @relation(fields: [productId], references: [id])
+  toppings OrderItemTopping[]
+}
+
+model OrderItemTopping {
+  id          String @id @default(cuid())
+  orderItemId String
+  toppingId   String
+  toppingName String
+  price       Float
+
+  orderItem OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  topping   Topping   @relation(fields: [toppingId], references: [id])
+}
+
+model Payment {
+  id             String    @id @default(cuid())
+  orderId        String    @unique
+  method         String    // CASH | BANK_TRANSFER | MOMO | CARD
+  status         String    @default("UNPAID") // UNPAID | PAID | REFUNDED
+  amount         Float
+  paidAmount     Float     @default(0)
+  changeAmount   Float     @default(0)
+  transactionRef String?
+  paidAt         DateTime?
+  processedById  String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  order       Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  processedBy User? @relation(fields: [processedById], references: [id])
+}
+
+model Ingredient {
+  id           String   @id @default(cuid())
+  name         String   @unique
+  unit         String   // g | ml | pcs | kg | l
+  currentStock Float    @default(0)
+  minStock     Float    @default(0)
+  costPerUnit  Float    @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  transactions StockTransaction[]
+}
+
+model StockTransaction {
+  id           String   @id @default(cuid())
+  ingredientId String
+  type         String   // IN | OUT | ADJUST
+  quantity     Float
+  note         String?
+  createdById  String
+  createdAt    DateTime @default(now())
+
+  ingredient Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+  createdBy  User       @relation(fields: [createdById], references: [id])
+}
+
+model Shift {
+  id           String    @id @default(cuid())
+  userId       String
+  status       String    @default("OPEN") // OPEN | CLOSED
+  startTime    DateTime  @default(now())
+  endTime      DateTime?
+  startingCash Float     @default(0)
+  endingCash   Float?
+  note         String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+}
