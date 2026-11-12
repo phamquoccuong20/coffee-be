@@ -30,3 +30,4 @@ jobs:
 
       - name: 5. Build NestJS application
         run: npm run build
+
